@@ -36,7 +36,7 @@ protocol QRCodeReaderLifeCycleDelegate: class {
 public final class QRCodeReader: NSObject, AVCaptureMetadataOutputObjectsDelegate {
   private let sessionQueue         = DispatchQueue(label: "session queue")
   private let metadataObjectsQueue = DispatchQueue(label: "com.yannickloriot.qr", attributes: [], target: nil)
-  
+
   let defaultDevice: AVCaptureDevice? = AVCaptureDevice.default(for: .video)
   let frontDevice: AVCaptureDevice?   = {
     if #available(iOS 10, *) {
@@ -79,6 +79,9 @@ public final class QRCodeReader: NSObject, AVCaptureMetadataOutputObjectsDelegat
 
   /// An array of object identifying the types of metadata objects to process.
   public let metadataObjectTypes: [AVMetadataObject.ObjectType]
+
+  // Flag indicating that raw bytes result is also acceptable
+  public var allowRawResult = false
 
   // MARK: - Managing the Code Discovery
 
@@ -382,9 +385,20 @@ public final class QRCodeReader: NSObject, AVCaptureMetadataOutputObjectsDelegat
 
       for current in metadataObjects {
         if let _readableCodeObject = current as? AVMetadataMachineReadableCodeObject {
-          if _readableCodeObject.stringValue != nil {
+          var rawResult = Data()
+          if let desc = _readableCodeObject.value(forKeyPath: "_internal.basicDescriptor") as? Dictionary<String,Any> {
+              print("ks: got desc: \(desc)")
+              if let raw = desc["BarcodeRawData"] as? Data {
+                  rawResult = raw
+              }
+          }
+          if _readableCodeObject.stringValue != nil || weakSelf.allowRawResult {
             if weakSelf.metadataObjectTypes.contains(_readableCodeObject.type) {
-              guard weakSelf.session.isRunning, let sVal = _readableCodeObject.stringValue else { return }
+              var stringResult = ""
+              guard weakSelf.session.isRunning else { return }
+              if _readableCodeObject.stringValue != nil {
+                stringResult = _readableCodeObject.stringValue!
+              }
 
               if weakSelf.stopScanningWhenCodeIsFound {
                 weakSelf.session.stopRunning()
@@ -394,7 +408,7 @@ public final class QRCodeReader: NSObject, AVCaptureMetadataOutputObjectsDelegat
                 }
               }
 
-              let scannedResult = QRCodeReaderResult(value: sVal, metadataType:_readableCodeObject.type.rawValue)
+              let scannedResult = QRCodeReaderResult(value: stringResult, metadataType:_readableCodeObject.type.rawValue, rawResult: rawResult)
 
               DispatchQueue.main.async {
                 weakSelf.didFindCode?(scannedResult)

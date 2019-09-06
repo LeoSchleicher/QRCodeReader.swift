@@ -39,4 +39,9 @@ public struct QRCodeReaderResult {
    The type of the metadata.
    */
   public let metadataType: String
+
+  /*
+   Raw QRCode data
+   */
+  public let rawResult:Data
 }
